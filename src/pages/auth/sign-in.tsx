@@ -6,7 +6,6 @@ import { Link } from "react-router-dom"
 import {useForm} from "react-hook-form"
 import {toast} from "sonner"
 import {z} from "zod"
-import { Ghost } from "lucide-react";
 
 const signInForm = z.object({
   email: z.string().email()
