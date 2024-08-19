@@ -7,6 +7,9 @@ import { OrderStatus } from "@/components/order-status";
 import {formatDistanceToNow} from "date-fns"
 import {ptBR} from "date-fns/locale"
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { cancelOrder } from "@/api/cancel-order";
+import { GetOrdersResponse } from "@/api/get-orders";
 
 export interface OrderTableRowProps {
   order: {
@@ -20,6 +23,33 @@ export interface OrderTableRowProps {
 
 export function OrderTableRow({ order }: OrderTableRowProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const queryClient = useQueryClient()
+
+  const {mutateAsync: cancelOrderFn} = useMutation({
+    mutationFn: cancelOrder,
+    async onSuccess(_, {orderId}){
+      const ordersListCache = queryClient.getQueriesData<GetOrdersResponse>({
+        queryKey: ["orders"],
+      })
+
+      ordersListCache.forEach(([cacheKey, cacheData]) => {
+        if(!cacheData){
+          return
+        }
+
+        queryClient.setQueryData<GetOrdersResponse>(cacheKey, {
+          ...cacheData,
+          orders: cacheData.orders.map(order => {
+            if(order.orderId === orderId) {
+              return {...order, status: "canceled"}
+            }
+
+            return order
+          })
+        })
+      })
+    },
+  })
 
   return (
     <TableRow>
@@ -32,7 +62,7 @@ export function OrderTableRow({ order }: OrderTableRowProps) {
             </Button>
           </DialogTrigger>
 
-          <OrderDetails open={isDetailsOpen} orderId={order.orderId}/>
+          <OrderDetails open={isDetailsOpen} orderId={order.orderId} />
         </Dialog>
       </TableCell>
       <TableCell className="font-mono text-xs font-medium">
@@ -41,17 +71,19 @@ export function OrderTableRow({ order }: OrderTableRowProps) {
       <TableCell className="text-muted-foreground">
         {formatDistanceToNow(order.createdAt, {
           locale: ptBR,
-          addSuffix: true
+          addSuffix: true,
         })}
       </TableCell>
       <TableCell>
         <OrderStatus status={order.status} />
       </TableCell>
       <TableCell className="font-medium">{order.customerName}</TableCell>
-      <TableCell className="font-medium">{(order.total / 100).toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      })}</TableCell>
+      <TableCell className="font-medium">
+        {(order.total / 100).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        })}
+      </TableCell>
       <TableCell>
         <Button variant="outline" size="xs">
           <ArrowRight className="mr-2 h-3 w-3" />
@@ -59,7 +91,12 @@ export function OrderTableRow({ order }: OrderTableRowProps) {
         </Button>
       </TableCell>
       <TableCell>
-        <Button variant="ghost" size="xs">
+        <Button
+          disabled={!["pending", "processing"].includes(order.status)}
+          onClick={() => cancelOrderFn({orderId: order.orderId})}
+          variant="ghost"
+          size="xs"
+        >
           <X className="mr-2 h-3 w-3" />
           Cancelar
         </Button>
